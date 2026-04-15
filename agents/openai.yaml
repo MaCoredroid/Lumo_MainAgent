@@ -1,0 +1,4 @@
+interface:
+  display_name: "Lumo Master Agent"
+  short_description: "Manage strict LumoAlpha sub-agent execution loops"
+  default_prompt: "Use $lumo-master-agent to run a strict isolated sub-agent loop for this LumoAlpha sequence."
