@@ -1,6 +1,6 @@
 ---
 name: lumo-master-agent
-description: "Use when the user wants Codex to act as a strict LumoAlpha orchestration agent for sub-agent work: one isolated implementation agent at a time, no parent chat context, ordered LLD sequences, commit-on-main workflow, and live-verification gates based on real behavior."
+description: "Use when the user wants Codex to act as a strict LumoAlpha orchestration agent for sub-agent work: one isolated implementation agent at a time, no parent chat context, ordered LLD sequences, live-verification gates based on real behavior, commit-on-main workflow, and push-to-spec-repo after verified working implementation."
 ---
 
 # Lumo Master Agent
@@ -32,6 +32,7 @@ Before starting the loop, capture or confirm:
   - whether sub-agents may edit a tracker doc
   - whether sub-agents may spawn other sub-agents
   - what test command they must run
+  - the spec git repo remote and branch that verified work must be pushed to, unless the user explicitly disables pushing
 
 If the user already supplied these in-thread, do not ask again.
 
@@ -62,6 +63,7 @@ Unless the user says otherwise:
 - forbid branches and worktrees
 - forbid nested sub-agents
 - require the sub-agent to commit its own fixes
+- require the sub-agent to push verified commits to the configured spec git repo
 - require live verification evidence in the final report
 
 ## Prompt Discipline
@@ -79,6 +81,7 @@ Then restate the hard rules in the prompt. For this workflow, the default rules 
 - do not edit any progress-tracking document
 - do not launch the next loop step yourself
 - live verify the spec against real behavior
+- push verified commits to the configured spec git repo and branch
 - use tests when they help, but do not over-focus on adding tests or chasing minor corner cases
 - focus on high-level cracks, truthfulness to the spec, and out-of-the-box failure modes
 - report one terminal status from a small fixed vocabulary
@@ -109,15 +112,16 @@ Hard rules:
 - Fix every problem you can find and reasonably resolve within this spec's scope before finishing.
 - Run <exact test command policy> when it helps verify the implementation, but do not confuse test volume with confidence.
 - Commit your work on main with a clear commit message.
+- If the implementation is working, push the verified commit(s) to <spec git repo remote> <spec git repo branch>.
 
 In your final message, state clearly one of:
-1. SPEC_LANDED_VERIFIED_AND_COMMITTED
+1. SPEC_LANDED_VERIFIED_AND_PUSHED
 2. BLOCKED_NEEDS_USER_HELP
 3. FULL_SEQUENCE_GOOD
 
 Use `FULL_SEQUENCE_GOOD` when this spec is the last required item in the ordered sequence and no high-level crack remains.
 
-Also list files changed, live verification performed, tests run if any, and any remaining high-level risk.
+Also list files changed, live verification performed, tests run if any, commit hashes, push result, and any remaining high-level risk.
 ```
 
 Always spell out the exact spec filename or exact task name. Do not use placeholders like `<current LLD>` in the actual sub-agent prompt.
@@ -129,11 +133,11 @@ Always spell out the exact spec filename or exact task name. Do not use placehol
 For an ordered sequence:
 1. Spawn one implementation agent for the next spec.
 2. Wait for terminal status.
-3. If `SPEC_LANDED_VERIFIED_AND_COMMITTED`, advance to the next spec in sequence.
+3. If `SPEC_LANDED_VERIFIED_AND_PUSHED`, advance to the next spec in sequence.
 4. If `FULL_SEQUENCE_GOOD`, end the loop.
 5. If `BLOCKED_NEEDS_USER_HELP`, stop and ask the user.
 
-There is no separate red-team pass by default. The implementation agent is responsible for implementation, live verification, and fixing what it can before returning.
+There is no separate verification-only pass by default. The implementation agent is responsible for implementation, live verification, and fixing what it can before returning.
 
 If a sub-agent returns a weak or obviously incomplete handoff, relaunch a fresh implementation agent on the same spec with the corrected contract.
 
@@ -162,6 +166,7 @@ If the user does not want tracking, keep loop state in-thread only.
 - Prefer real behavior checks and broad regression slices over piling up local unit tests.
 - If there is no high-level crack left, mark the sequence good instead of stalling on minor corner cases.
 - Push the implementation agent to fix all problems it reasonably can, not just report them.
+- Verified working implementation should be committed first, then pushed to the configured spec git repo.
 - Keep prompts operational, not conversational.
 - The main agent should coordinate; the sub-agent should execute.
 - For live verification workflows, "pull in a loop until terminal" is the
@@ -177,6 +182,7 @@ If the user says “run the usual Lumo loop,” default to:
 - one sub-agent at a time
 - no nested sub-agents
 - sub-agents commit their own fixes
+- sub-agents push verified commits to the configured spec git repo and branch
 - Docker-backed `make test ...` only when it helps verify real behavior
 - explicit LLD filenames in implementation prompts
 - live verification by the same implementation agent before advancing
