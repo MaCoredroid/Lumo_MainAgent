@@ -1,4 +1,4 @@
 interface:
   display_name: "Lumo Master Agent"
-  short_description: "Manage strict LumoAlpha sub-agent execution loops"
-  default_prompt: "Use $lumo-master-agent to run a strict isolated sub-agent loop for this LumoAlpha sequence."
+  short_description: "Run dynamic LumoAlpha subagent goal loops"
+  default_prompt: "Use $lumo-master-agent to recover context, spawn isolated subagents for bounded goals, monitor progress, and review outcomes."
