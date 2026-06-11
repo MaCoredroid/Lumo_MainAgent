@@ -1,0 +1,4 @@
+interface:
+  display_name: "Claude Session Context"
+  short_description: "Read recent Claude Code session context"
+  default_prompt: "Use $claude-session-context to inspect recent Claude Code sessions and recover workflow context."
