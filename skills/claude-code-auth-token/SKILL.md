@@ -1,6 +1,6 @@
 ---
 name: claude-code-auth-token
-description: Audit, summarize, repair, or debug Claude Code authentication and token state. Use when the user asks about Claude Code OAuth/API tokens, `claude setup-token`, `CLAUDE_CODE_OAUTH_TOKEN` warnings, Claude auth cleanup, whether a token is set, debug/auth-status commands, or Codex/Claude threads that changed Claude Code credentials. Always avoid printing secret token values.
+description: Audit, summarize, repair, or debug Claude Code authentication and token state. Use when the user asks about Claude Code OAuth/API tokens, `claude setup-token`, `CLAUDE_CODE_OAUTH_TOKEN` warnings, Claude auth cleanup, stale resumed tmux/Claude sessions, whether a token is set, debug/auth-status commands, or Codex/Claude threads that changed Claude Code credentials. Always avoid printing secret token values.
 ---
 
 # Claude Code Auth Token
@@ -14,6 +14,7 @@ Use this skill to investigate Claude Code auth/token state without exposing secr
 - Redact command output before showing snippets that may contain `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `CLAUDE_API_KEY`, bearer tokens, or `sk-*` values.
 - Prefer clean-environment checks when verifying disk auth, so live inherited env tokens do not mask the real state.
 - Treat existing debug logs as sensitive until searched and redacted.
+- For resumed tmux/Claude sessions, verify the actual pane behavior by typing a minimal prompt and reading the response. Do not rely only on external `claude -p` checks.
 
 ## Known Local Threads
 
@@ -114,7 +115,17 @@ bash -ic 'printf explicit_interactive=; if [ -n "${CLAUDE_CODE_OAUTH_TOKEN+x}" ]
 sh -lc '. "$HOME/.profile"; printf explicit_profile=; if [ -n "${CLAUDE_CODE_OAUTH_TOKEN+x}" ]; then echo set; else echo unset; fi'
 ```
 
-5. If the user asks for thread evidence, search only targeted Codex logs first:
+5. For a live tmux/Claude pane, identify the pane, its process environment, and the pane-visible failure:
+
+```bash
+tmux list-panes -a -F '#{session_name}:#{window_index}.#{pane_index} pid=#{pane_pid} cmd=#{pane_current_command} path=#{pane_current_path} title=#{pane_title}'
+tmux capture-pane -p -J -S -120 -t '<target>' | sed -E 's/(sk-[A-Za-z0-9_-]+)/[REDACTED]/g'
+pid=<pane_pid>
+printf 'proc_CLAUDE_CODE_OAUTH_TOKEN='
+if tr '\0' '\n' < "/proc/$pid/environ" | grep -q '^CLAUDE_CODE_OAUTH_TOKEN='; then echo set; else echo unset; fi
+```
+
+6. If the user asks for thread evidence, search only targeted Codex logs first:
 
 ```bash
 rg -n -i 'CLAUDE_CODE_OAUTH_TOKEN|setup-token|claude auth status|--debug|debug-file' \
@@ -135,10 +146,58 @@ If Claude login should use stored credentials instead of an inherited token:
 - Add the same guard near the top of `~/.profile` for non-bash login shells.
 - Tell the user already-open terminals need a one-time `unset CLAUDE_CODE_OAUTH_TOKEN` or restart.
 
+If a supplied long-lived OAuth token should replace the current runtime auth:
+- Store the token in one locked-down env file such as `~/.config/claude-code/oauth-token.env` with directory mode `700` and file mode `600`.
+- Source that env file from startup files instead of keeping multiple token exports.
+- Update tmux's global environment for new panes:
+
+```bash
+bash -lc 'source "$HOME/.config/claude-code/oauth-token.env"; tmux set-environment -g CLAUDE_CODE_OAUTH_TOKEN "$CLAUDE_CODE_OAUTH_TOKEN"'
+```
+
+- Verify clean disk auth and token-only auth separately:
+
+```bash
+env -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_API_KEY -u CLAUDE_API_KEY claude auth status
+bash -lc 'source "$HOME/.config/claude-code/oauth-token.env"; claude auth status'
+```
+
 If Claude disk auth should be cleared:
 - Remove `~/.claude/.credentials.json` only when explicitly requested.
 - Remove `oauthAccount` and `userID` from `~/.claude.json` only when explicitly requested.
 - Verify with clean-env `claude auth status`.
+
+If a resumed tmux/Claude session still shows the old account or old usage limit after the env token is set:
+- Treat disk auth metadata as stale until proven otherwise. A live process can have the correct `CLAUDE_CODE_OAUTH_TOKEN` while the resumed interactive UI still hydrates old `~/.claude/.credentials.json` or `~/.claude.json` `oauthAccount`/`userID` state.
+- Back up before clearing disk state:
+
+```bash
+stamp=$(date +%Y%m%dT%H%M%S)
+backup_dir="$HOME/.claude/auth-backup-$stamp"
+mkdir -p "$backup_dir"
+chmod 700 "$backup_dir"
+cp -p "$HOME/.claude.json" "$backup_dir/.claude.json"
+[ -f "$HOME/.claude/.credentials.json" ] && mv "$HOME/.claude/.credentials.json" "$backup_dir/.credentials.json"
+jq 'del(.oauthAccount, .userID)' "$backup_dir/.claude.json" > "$HOME/.claude.json.tmp"
+chmod 600 "$HOME/.claude.json.tmp"
+mv "$HOME/.claude.json.tmp" "$HOME/.claude.json"
+```
+
+- Re-check that clean-env auth is logged out and token-env auth is logged in.
+- Restart the exact resumed session from a token-sourced shell, for example:
+
+```bash
+bash -lc 'source "$HOME/.config/claude-code/oauth-token.env"; cd /path/to/repo; exec claude --dangerously-skip-permissions --resume <session-id>'
+```
+
+- Type a minimal prompt into the actual tmux pane and capture the response:
+
+```bash
+tmux send-keys -t '<target>' 'Reply with exactly OK.' Enter
+tmux capture-pane -p -J -S -80 -t '<target>' | sed -E 's/(sk-[A-Za-z0-9_-]+)/[REDACTED]/g'
+```
+
+- A successful headless `claude -p` check proves the token works for new processes; it does not prove the resumed interactive pane has stopped using stale disk account metadata. The pane-visible response is the deciding check.
 
 ## Debug Handling
 
