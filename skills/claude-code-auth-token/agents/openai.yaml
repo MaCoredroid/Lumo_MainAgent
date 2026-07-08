@@ -1,0 +1,4 @@
+interface:
+  display_name: "Claude Code Auth Token"
+  short_description: "Audit Claude Code auth and token state"
+  default_prompt: "Use $claude-code-auth-token to audit and summarize Claude Code auth token state without exposing secrets."
